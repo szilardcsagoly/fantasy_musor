@@ -15,6 +15,7 @@ if(!$included) die();
     
     <!-- Saját CSS -->
     <link href="/css/fanta.css" rel="stylesheet">
+    <link href="/css/lista.css" rel="stylesheet">
     
     <?=$plusmeta;?>
 </head>

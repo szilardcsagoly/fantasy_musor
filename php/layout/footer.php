@@ -12,9 +12,9 @@ if($mpage != 'admin' && $mpage != 'belépés'){
 <!-- JavaScript Fájlok -->
 <script src="/js/jquery-3.7.1.min.js" type="text/javascript"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
 <script src="/js/fanta.js?v=5.0" type="text/javascript"></script>
-
-
+<script src="/js/lista.js" type="text/javascript"></script>
 
 </body>
 </html>

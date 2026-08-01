@@ -1,0 +1,123 @@
+/* ==========================================================================
+   ALAPBEÁLLÍTÁSOK ÉS OLDAL ELRENDEZÉS
+   ========================================================================== */
+body {
+    /* A menü magasságától függően 60px - 80px közötti érték az ideális */
+    padding-top: 45px; 
+    background: black;
+}
+
+.fooldal {
+    background-color: rgb(22, 96, 206);
+    color: white;
+    padding: 20px;
+    min-height: 400px;
+}
+
+/* Extra kis gombok stílusa (pl. ABC ugró gombok) */
+.btn-xs {
+    padding: 0.15rem 0.35rem;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    border-radius: 0.2rem;
+}
+
+/* VÁLTÓGOMBOK EGYEDI STÍLUSA
+   Ha a fenti "Dalok/Előadók szerint" rádiógomb be van jelölve, 
+   fekete lesz a szövege az élénk kék háttéren */
+.text-info-toggle-group .btn-check:checked + .btn-outline-info {
+    background-color: #0dcaf0 !important;
+    color: #000000 !important;
+    font-weight: bold;
+}
+
+/* ==========================================================================
+   PROMPTER ÉS STABIL AKKORD RENDELÉS (Nincs több függőleges ugrálás)
+   ========================================================================== */
+
+/* A teljes szövegsor blokkja */
+.prompter-row {
+    display: block;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    padding: 2px 5px;
+    border-radius: 4px;
+    
+    /* MÓDOSÍTVA: Kivettük a fix sormagasságot, hogy a többsoros törésnél ne csússzanak egymásra */
+    line-height: 2.2em !important; 
+    min-height: 2.2em !important;
+}
+
+.prompter-row:hover {
+    background-color: #111; /* Finom visszajelzés PC-n, ha fölé viszed az egeret */
+}
+
+/* Zenekari prompter aktív / éppen játszott sora */
+.active-stage-line {
+    background-color: #2a2a00 !important; /* Halvány, elegáns sötétsárga kiemelés */
+    border-left: 3px solid #ffc107;
+}
+
+/* Refrének kiemelése */
+.refren-block {
+    background-color: #1a1a24;
+    border-left: 4px solid #ffc107;
+    padding: 5px 10px;
+    margin: 10px 0;
+}
+
+/* Az akkordot és a hozzá tartozó szót összefogó konténer */
+.chord-line-container {
+    display: inline-block;
+    position: relative;
+    vertical-align: baseline;
+    
+    /* MÓDOSÍTVA: Plusz felső margót adunk, így ha a sor mobilon kettétörik, 
+       a második rész automatikusan lejjebb tolódik, hogy az akkordok elférjenek! */
+    margin-top: 1.1em !important; 
+}
+
+/* Maga az akkord felirat a szó felett lebegve */
+.chord-badge {
+    position: absolute;
+    bottom: 1.2em; /* Pontosan a modern talpatlan betűtípus fölé lövi be az akkordot */
+    left: 0;
+    color: #0dcaf0 !important; /* Kérésre visszaállítva a diszkrét kék színre */
+    font-weight: bold;
+    font-size: 1.1em;
+}
+
+/* ==========================================================================
+   MOBIL ÉS NAVIGÁCIÓS FINOMHANGOLÁSOK
+   ========================================================================== */
+
+/* Kétablakos szerkesztő magassága mobil eszközökön */
+@media (max-width: 767.98px) {
+    #leftScrollBox, #rightScrollBox {
+        height: 40vh !important;
+        max-height: 40vh !important;
+    }
+}
+
+/* Mobilos érintés / nyomás azonnali vizuális visszajelzése a menüben */
+.nav-btn:active, 
+.nav-btn:focus {
+    color: #198754 !important; /* Nyomásra Bootstrap-zöldre vált a szöveg */
+    background-color: rgba(255, 255, 255, 0.1); /* Halvány szürke háttér villanás */
+    border-radius: 4px;
+    outline: none;
+}
+
+/* ABC outline gombok nyomáskori sötétítése mobilon, hogy ne vakítson */
+.btn-outline-info:active, .btn-outline-info:focus {
+    background-color: rgba(13, 202, 240, 0.2) !important;
+    color: #0dcaf0 !important;
+}
+
+.sticky-top-control {
+    position: sticky !important;
+    top: 52px !important; /* Pontosan a menü magassága, így alá ragad be */
+    padding-top: 8px;
+    padding-bottom: 8px;
+    margin-bottom: 15px;
+}

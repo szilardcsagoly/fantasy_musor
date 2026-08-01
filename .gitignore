@@ -1,0 +1,14 @@
+# local config
+/config.php
+/php/config.php
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# logs / temp
+*.log
+*.tmp
+*.bak

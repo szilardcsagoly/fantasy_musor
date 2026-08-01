@@ -1,0 +1,26 @@
+Options -Indexes
+
+Options +FollowSymlinks
+RewriteEngine On
+RewriteBase /
+
+
+
+## többszörös / jelek esetén 404-es hiba
+RewriteCond %{REQUEST_URI} !^/bgp.*$
+RewriteCond %{THE_REQUEST} ^[A-Z]+\ (.*)//(.*)\ HTTP/
+RewriteRule .* - [L]
+
+
+## vég / jel(ek) hozzáadása
+##RewriteCond %{SERVER_ADDR} !^127\.0\.0\.1$ [NC]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_URI} !(.*)/$
+RewriteRule ^(.*)$ %{REQUEST_URI}/ [R=301,QSA,L]
+
+## oldal átirányítások
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+# átirányítás 3. (alalaloldal) szintig
+RewriteRule ^([^/]*)/{0,1}([^/]*)/{0,1}([^/]*)/{0,1}([^/]*)/{0,1}$ index.php?mpage=$1&subpage=$2&subsubpage=$3 [L,QSA,NC]
+

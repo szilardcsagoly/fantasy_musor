@@ -104,7 +104,13 @@
                     </div>
 
                     <div class="mb-2 flex-grow-1">
-                        <label class="form-label small text-white-50 m-0">Szöveg + Akkordok szögletes zárójelben (pl: [Am]Szöveg)</label>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <label class="form-label small text-white-50 m-0">Szöveg + Akkordok szögletes zárójelben (pl: [Am]Szöveg)</label>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" id="btnConvertChordPro" class="btn btn-outline-warning fw-bold" title="Akkordsorok átalakítása ChordPro formátumra">ChordPro</button>
+                                <button type="button" id="btnInsertChord" class="btn btn-outline-info fw-bold" title="Akkord beszúrása (Ctrl+Alt+D)" aria-label="Akkord beszúrása (Ctrl+Alt+D)">[-]</button>
+                            </div>
+                        </div>
                         <textarea id="editLyrics" class="form-control bg-dark text-white border-secondary h-100 onsong-font" rows="12" style="resize: none;"></textarea>
                     </div>
                 </div>

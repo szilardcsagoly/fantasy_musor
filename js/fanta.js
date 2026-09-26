@@ -267,6 +267,131 @@ $(document).ready(function() {
         $('#followBandSwitch').change(function() { if($(this).is(':checked')) { activeSongId = 0; resetSyncState(); } });
         $('#fontSizeSlider').on('input', function() { $('#prompterOutput').css('font-size', $(this).val() + 'px'); });
 
+        function insertChordBrackets() {
+            var lyricsField = document.getElementById('editLyrics');
+            var start = lyricsField.selectionStart;
+            var end = lyricsField.selectionEnd;
+            var scrollTop = lyricsField.scrollTop;
+            var selectedText = lyricsField.value.substring(start, end);
+            lyricsField.value = lyricsField.value.substring(0, start) + '[' + selectedText + ']' + lyricsField.value.substring(end);
+            lyricsField.focus();
+            lyricsField.setSelectionRange(start + 1, end + 1);
+            lyricsField.scrollTop = scrollTop;
+            $(lyricsField).trigger('input');
+            lyricsField.scrollTop = scrollTop;
+        }
+
+        function getChordSelection(lyricsField) {
+            var text = lyricsField.value;
+            var selectionStart = lyricsField.selectionStart;
+            var selectionEnd = lyricsField.selectionEnd;
+            var selectedText = text.substring(selectionStart, selectionEnd);
+            if (/^\[[^\]\r\n]+\]$/.test(selectedText)) {
+                return { start: selectionStart, end: selectionEnd };
+            }
+
+            var chordStart = text.lastIndexOf('[', selectionStart);
+            var chordEnd = text.indexOf(']', selectionStart);
+            var lineStart = text.lastIndexOf('\n', selectionStart - 1) + 1;
+            var lineEnd = text.indexOf('\n', selectionStart);
+            if (lineEnd === -1) lineEnd = text.length;
+            if (chordStart < lineStart || chordEnd < chordStart || chordEnd >= lineEnd) {
+                return null;
+            }
+            if (!/^\[[^\]\r\n]+\]$/.test(text.substring(chordStart, chordEnd + 1))) return null;
+            return { start: chordStart, end: chordEnd + 1 };
+        }
+
+        function moveChordByCharacter(direction) {
+            var lyricsField = document.getElementById('editLyrics');
+            var chordSelection = getChordSelection(lyricsField);
+            if (!chordSelection) return false;
+
+            var text = lyricsField.value;
+            var chord = text.substring(chordSelection.start, chordSelection.end);
+            var textWithoutChord = text.substring(0, chordSelection.start) + text.substring(chordSelection.end);
+            var targetPosition = direction < 0 ? chordSelection.start - 1 : chordSelection.start + 1;
+            var adjacentCharacter = direction < 0 ? text.charAt(chordSelection.start - 1) : text.charAt(chordSelection.end);
+            if (targetPosition < 0 || targetPosition > textWithoutChord.length || adjacentCharacter === '\n' || adjacentCharacter === '\r') return false;
+
+            textWithoutChord = textWithoutChord.substring(0, targetPosition) + chord + textWithoutChord.substring(targetPosition);
+            lyricsField.value = textWithoutChord;
+            lyricsField.focus();
+            lyricsField.setSelectionRange(targetPosition, targetPosition + chord.length);
+            $(lyricsField).trigger('input');
+            return true;
+        }
+
+        function isChordToken(token) {
+            return /^[A-G](?:#|b)?(?:m|min|maj|dim|aug|sus|add)?\d*(?:\/[A-G](?:#|b)?)?$/.test(token);
+        }
+
+        function getChordTokens(line) {
+            var tokens = [];
+            var tokenMatch = /\S+/g;
+            var match;
+            while ((match = tokenMatch.exec(line)) !== null) {
+                if (!isChordToken(match[0])) return [];
+                tokens.push({ chord: match[0], position: match.index });
+            }
+            return tokens;
+        }
+
+        function convertAlignedChordsToChordPro(text) {
+            var lines = text.split('\n');
+            var convertedLines = [];
+            var changed = false;
+
+            for (var lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+                var chordTokens = getChordTokens(lines[lineIndex]);
+                var lyricsLine = lines[lineIndex + 1];
+                if (chordTokens.length > 0 && lyricsLine !== undefined && lyricsLine.trim() !== '') {
+                    var convertedLyrics = lyricsLine;
+                    var insertions = chordTokens.map(function(token) {
+                        var position = Math.min(token.position, convertedLyrics.length);
+                        while (position < convertedLyrics.length && /\s/.test(convertedLyrics.charAt(position))) position++;
+                        while (position > 0 && !/\s/.test(convertedLyrics.charAt(position - 1))) position--;
+                        return { chord: token.chord, position: position };
+                    });
+
+                    insertions.sort(function(first, second) { return second.position - first.position; });
+                    insertions.forEach(function(insertion) {
+                        convertedLyrics = convertedLyrics.substring(0, insertion.position) + '[' + insertion.chord + ']' + convertedLyrics.substring(insertion.position);
+                    });
+                    convertedLines.push(convertedLyrics);
+                    lineIndex++;
+                    changed = true;
+                } else {
+                    convertedLines.push(lines[lineIndex]);
+                }
+            }
+            return { text: convertedLines.join('\n'), changed: changed };
+        }
+
+        $('#btnInsertChord').click(insertChordBrackets);
+        $('#btnConvertChordPro').click(function() {
+            var lyricsField = document.getElementById('editLyrics');
+            var editorPanel = document.getElementById('leftScrollBox');
+            var lyricsScrollTop = lyricsField.scrollTop;
+            var panelScrollTop = editorPanel.scrollTop;
+            var conversion = convertAlignedChordsToChordPro($('#editLyrics').val());
+            if (!conversion.changed) {
+                alert('Nem találtam átalakítható akkordsorokat.');
+                return;
+            }
+            $('#editLyrics').val(conversion.text).trigger('input').focus();
+            lyricsField.scrollTop = lyricsScrollTop;
+            editorPanel.scrollTop = panelScrollTop;
+        });
+        $('#editLyrics').keydown(function(event) {
+            if (event.ctrlKey && event.altKey && event.code === 'KeyD') {
+                event.preventDefault();
+                insertChordBrackets();
+            } else if (event.ctrlKey && event.altKey && (event.code === 'ArrowLeft' || event.code === 'ArrowRight')) {
+                if (moveChordByCharacter(event.code === 'ArrowLeft' ? -1 : 1)) event.preventDefault();
+            }
+        });
+
         $('#toggleViewBtn').click(function() {
             isEditorMode = !isEditorMode;
             if(isEditorMode) {

@@ -4,10 +4,19 @@ $(function () {
     const $playlist = $('#playlistPreview');
     const $playlistItems = $('#playlistItems');
     const $countBadge = $('#playlistCount');
+    const $savedPlaylistsSelect = $('#savedPlaylistsSelect');
+    const $savePlaylistModal = $('#savePlaylistModal');
+    const $newPlaylistName = $('#newPlaylistName');
+    const $songSearch = $('#songSearch');
     const allSongs = $availableList.find('.draggable-song').map(function () {
         return $(this);
     }).get();
     const storageKey = 'fantaPlaylistState';
+    const activeSavedPlaylistKey = 'fantaActiveSavedPlaylistId';
+    const activeSavedPlaylistNameKey = 'fantaActiveSavedPlaylistName';
+    let activeSavedPlaylistId = localStorage.getItem(activeSavedPlaylistKey);
+    let activeSavedPlaylistName = localStorage.getItem(activeSavedPlaylistNameKey) || '';
+    let activeSavedPlaylistSnapshot = null;
 
     function updatePlaylistCount() {
         const count = $playlistItems.find('.playlist-item').length;
@@ -21,13 +30,7 @@ $(function () {
     }
 
     function savePlaylistState() {
-        const items = $playlistItems.find('.playlist-item').map(function () {
-            return {
-                id: $(this).data('song-id'),
-                title: $(this).find('.fw-bold').first().text(),
-                artist: $(this).find('.small.text-white-50').first().text()
-            };
-        }).get();
+        const items = getPlaylistItems();
 
         localStorage.setItem(storageKey, JSON.stringify(items));
 
@@ -41,17 +44,114 @@ $(function () {
         });
     }
 
+    function getPlaylistItems() {
+        return $playlistItems.find('.playlist-item').map(function () {
+            return {
+                id: $(this).data('song-id'),
+                title: $(this).find('.fw-bold').first().text(),
+                artist: $(this).find('.small.text-white-50').first().text()
+            };
+        }).get();
+    }
+
+    function hasUnsavedPlaylistChanges() {
+        const items = getPlaylistItems();
+        if (!items.length && !activeSavedPlaylistSnapshot) {
+            return false;
+        }
+        if (!activeSavedPlaylistId || activeSavedPlaylistSnapshot === null) {
+            return items.length > 0 || Boolean(activeSavedPlaylistId);
+        }
+        return JSON.stringify(items) !== activeSavedPlaylistSnapshot;
+    }
+
+    function confirmDiscardPlaylistChanges() {
+        if (!hasUnsavedPlaylistChanges()) {
+            return true;
+        }
+        return window.confirm('A módosítások nincsenek elmentve a mentett listába. Biztosan elhagyod őket?');
+    }
+
+    function clearActiveSavedPlaylist() {
+        activeSavedPlaylistId = null;
+        activeSavedPlaylistName = '';
+        activeSavedPlaylistSnapshot = null;
+        localStorage.removeItem(activeSavedPlaylistKey);
+        localStorage.removeItem(activeSavedPlaylistNameKey);
+    }
+
+    function normalizeSearchText(value) {
+        return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('hu');
+    }
+
+    function filterAvailableSongs() {
+        const query = normalizeSearchText($songSearch.val());
+        let visibleCount = 0;
+
+        allSongs.forEach(function ($song) {
+            const title = normalizeSearchText($song.data('title'));
+            const artist = normalizeSearchText($song.data('artist'));
+            const matches = !query || title.includes(query) || artist.includes(query);
+            $song.toggleClass('d-none', !matches);
+            if (matches) {
+                visibleCount++;
+            }
+        });
+
+        $availableList.find('[data-letter-group]').each(function () {
+            const hasVisibleSongs = $(this).nextUntil('[data-letter-group]').filter('.draggable-song').not('.d-none').length > 0;
+            $(this).toggleClass('d-none', !hasVisibleSongs);
+        });
+        $('#songSearchEmpty').toggleClass('d-none', visibleCount > 0);
+    }
+
+    function renderPlaylist(items) {
+        $playlistItems.find('.playlist-item, .playlist-empty').remove();
+        items.forEach(function (item) {
+            $playlistItems.append(buildPlaylistItem(item.id, item.title, item.artist));
+        });
+        renderEmptyState();
+        updatePlaylistCount();
+    }
+
+    function loadSavedPlaylists(selectedId) {
+        $.ajax({
+            url: '/php/api/saved_playlists.php',
+            type: 'GET',
+            dataType: 'json'
+        }).done(function (playlists) {
+            $savedPlaylistsSelect.find('option:not(:first)').remove();
+            playlists.forEach(function (playlist) {
+                $('<option>').val(playlist.id).text(playlist.name).appendTo($savedPlaylistsSelect);
+            });
+            const rememberedId = selectedId || activeSavedPlaylistId;
+            const hasRememberedPlaylist = rememberedId && $savedPlaylistsSelect.find('option[value="' + rememberedId + '"]').length;
+            if (hasRememberedPlaylist) {
+                $savedPlaylistsSelect.val(String(rememberedId));
+                $.getJSON('/php/api/saved_playlists.php', { id: rememberedId }).done(function (playlist) {
+                    activeSavedPlaylistId = String(playlist.id);
+                    activeSavedPlaylistName = playlist.name;
+                    activeSavedPlaylistSnapshot = JSON.stringify(playlist.playlist);
+                    localStorage.setItem(activeSavedPlaylistKey, activeSavedPlaylistId);
+                    localStorage.setItem(activeSavedPlaylistNameKey, activeSavedPlaylistName);
+                }).fail(function () {
+                    clearActiveSavedPlaylist();
+                    $savedPlaylistsSelect.val('');
+                });
+            } else {
+                clearActiveSavedPlaylist();
+            }
+            $('#deleteSavedPlaylistBtn').prop('disabled', !$savedPlaylistsSelect.val());
+        });
+    }
+
     function loadPlaylistState() {
         const saved = localStorage.getItem(storageKey);
         if (saved) {
             try {
                 const items = JSON.parse(saved);
                 if (Array.isArray(items) && items.length) {
-                    $playlistItems.find('.playlist-item, .playlist-empty').remove();
-                    items.forEach(function (item) {
-                        $playlistItems.append(buildPlaylistItem(item.id, item.title, item.artist));
-                    });
-                    updatePlaylistCount();
+                    renderPlaylist(items);
                     return;
                 }
             } catch (e) {
@@ -68,12 +168,69 @@ $(function () {
                 return;
             }
 
-            $playlistItems.find('.playlist-item, .playlist-empty').remove();
-            items.forEach(function (item) {
-                $playlistItems.append(buildPlaylistItem(item.id, item.title, item.artist));
-            });
+            renderPlaylist(items);
             localStorage.setItem(storageKey, JSON.stringify(items));
-            updatePlaylistCount();
+        });
+    }
+
+    function openSavePlaylistModal() {
+        $('#savePlaylistError').text('').addClass('d-none');
+        $newPlaylistName.val('');
+
+        if (activeSavedPlaylistId) {
+            $('#savePlaylistPrompt').text('A(z) „' + activeSavedPlaylistName + '” listát frissíted, vagy új néven mented?');
+            $('#newPlaylistNameGroup, #createNamedPlaylistBtn').addClass('d-none');
+            $('#updateSavedPlaylistBtn, #startSaveAsNewBtn').removeClass('d-none');
+        } else {
+            $('#savePlaylistPrompt').text('Adj nevet az új mentett listának.');
+            $('#newPlaylistNameGroup').removeClass('d-none');
+            $('#updateSavedPlaylistBtn, #startSaveAsNewBtn').addClass('d-none');
+            $('#createNamedPlaylistBtn').removeClass('d-none');
+        }
+
+        bootstrap.Modal.getOrCreateInstance($savePlaylistModal[0]).show();
+    }
+
+    function saveNamedPlaylist(action) {
+        const data = {
+            action: action,
+            playlist: JSON.stringify(getPlaylistItems())
+        };
+
+        if (action === 'update') {
+            data.id = activeSavedPlaylistId;
+        } else {
+            data.name = $newPlaylistName.val().trim();
+            if (!data.name) {
+                $('#savePlaylistError').text('Adj nevet a listának.').removeClass('d-none');
+                $newPlaylistName.trigger('focus');
+                return;
+            }
+        }
+
+        $('#savePlaylistError').text('').addClass('d-none');
+        $.ajax({
+            url: '/php/api/saved_playlists.php',
+            type: 'POST',
+            data: data,
+            dataType: 'json'
+        }).done(function (result) {
+            if (!result.success) {
+                $('#savePlaylistError').text(result.message || 'A lista mentése nem sikerült.').removeClass('d-none');
+                return;
+            }
+
+            activeSavedPlaylistId = String(result.id);
+            activeSavedPlaylistName = result.name;
+            activeSavedPlaylistSnapshot = JSON.stringify(getPlaylistItems());
+            localStorage.setItem(activeSavedPlaylistKey, activeSavedPlaylistId);
+            localStorage.setItem(activeSavedPlaylistNameKey, activeSavedPlaylistName);
+            loadSavedPlaylists(activeSavedPlaylistId);
+            $('#playlistSaveStatus').text('Mentve: ' + result.name);
+            bootstrap.Modal.getOrCreateInstance($savePlaylistModal[0]).hide();
+        }).fail(function (xhr) {
+            const message = xhr.responseJSON && xhr.responseJSON.message;
+            $('#savePlaylistError').text(message || 'A lista mentése nem sikerült.').removeClass('d-none');
         });
     }
 
@@ -105,12 +262,16 @@ $(function () {
 
     function scrollToLetter(letter) {
         const normalized = (letter || '').toUpperCase();
+        if ($songSearch.val()) {
+            $songSearch.val('');
+            filterAvailableSongs();
+        }
         let target = null;
 
         $availableList.find('.draggable-song').each(function () {
             const $item = $(this);
             const title = ($item.data('title') || '').toUpperCase();
-            if (title.charAt(0) === normalized) {
+            if (!$item.hasClass('d-none') && title.charAt(0) === normalized) {
                 target = $item;
                 return false;
             }
@@ -135,6 +296,8 @@ $(function () {
         $(this).addClass('active');
         scrollToLetter($(this).data('letter'));
     });
+
+    $songSearch.on('input', filterAvailableSongs);
 
     $(document).on('keydown', function (e) {
         const key = e.key.toUpperCase();
@@ -208,12 +371,129 @@ $(function () {
     }
 
     $('#resetPlaylist').on('click', function () {
+        if (!confirmDiscardPlaylistChanges()) {
+            return;
+        }
+        clearActiveSavedPlaylist();
+        $savedPlaylistsSelect.val('');
         $playlistItems.find('.playlist-item').remove();
         renderEmptyState();
         updatePlaylistCount();
         savePlaylistState();
     });
 
+    $('#savePlaylistBtn').on('click', openSavePlaylistModal);
+
+    $('#updateSavedPlaylistBtn').on('click', function () {
+        saveNamedPlaylist('update');
+    });
+
+    $('#startSaveAsNewBtn').on('click', function () {
+        $('#newPlaylistNameGroup').removeClass('d-none');
+        $('#startSaveAsNewBtn').addClass('d-none');
+        $('#createNamedPlaylistBtn').removeClass('d-none');
+        $newPlaylistName.val(activeSavedPlaylistName);
+        $newPlaylistName.trigger('focus');
+    });
+
+    $('#createNamedPlaylistBtn').on('click', function () {
+        saveNamedPlaylist('create');
+    });
+
+    $savedPlaylistsSelect.on('change', function () {
+        const playlistId = $(this).val();
+        $('#deleteSavedPlaylistBtn').prop('disabled', !playlistId);
+        if (!playlistId) {
+            clearActiveSavedPlaylist();
+            return;
+        }
+
+        if (!confirmDiscardPlaylistChanges()) {
+            $(this).val(activeSavedPlaylistId || '');
+            $('#deleteSavedPlaylistBtn').prop('disabled', !$savedPlaylistsSelect.val());
+            return;
+        }
+
+        $savedPlaylistsSelect.prop('disabled', true);
+
+        $.ajax({
+            url: '/php/api/saved_playlists.php',
+            type: 'GET',
+            data: { id: playlistId },
+            dataType: 'json'
+        }).done(function (result) {
+            renderPlaylist(result.playlist);
+            activeSavedPlaylistId = String(result.id);
+            activeSavedPlaylistName = result.name;
+            activeSavedPlaylistSnapshot = JSON.stringify(result.playlist);
+            localStorage.setItem(activeSavedPlaylistKey, activeSavedPlaylistId);
+            localStorage.setItem(activeSavedPlaylistNameKey, activeSavedPlaylistName);
+            savePlaylistState();
+            $('#playlistSaveStatus').text('Betöltve: ' + result.name);
+        }).fail(function () {
+            $('#playlistSaveStatus').text('A mentett lista betöltése nem sikerült.');
+            $savedPlaylistsSelect.val(activeSavedPlaylistId || '');
+            $('#deleteSavedPlaylistBtn').prop('disabled', !$savedPlaylistsSelect.val());
+        }).always(function () {
+            $savedPlaylistsSelect.prop('disabled', false);
+        });
+    });
+
+    $('#deleteSavedPlaylistBtn').on('click', function () {
+        const playlistId = $savedPlaylistsSelect.val();
+        if (!playlistId) {
+            return;
+        }
+
+        const playlistName = $savedPlaylistsSelect.find('option:selected').text();
+        if (!window.confirm('Biztosan törlöd a(z) „' + playlistName + '” mentett listát? A jelenlegi összeállítás megmarad.')) {
+            return;
+        }
+
+        const $deleteButton = $(this).prop('disabled', true);
+        $.ajax({
+            url: '/php/api/saved_playlists.php',
+            type: 'POST',
+            data: { action: 'delete', id: playlistId },
+            dataType: 'json'
+        }).done(function (result) {
+            if (!result.success) {
+                $('#playlistSaveStatus').text(result.message || 'A lista törlése nem sikerült.');
+                return;
+            }
+
+            if (activeSavedPlaylistId === String(playlistId)) {
+                clearActiveSavedPlaylist();
+            }
+            $savedPlaylistsSelect.find('option[value="' + playlistId + '"]').remove();
+            $savedPlaylistsSelect.val('');
+            $('#playlistSaveStatus').text('Törölve: ' + playlistName + '. A jelenlegi összeállítás megmaradt.');
+        }).fail(function () {
+            $('#playlistSaveStatus').text('A lista törlése nem sikerült.');
+        }).always(function () {
+            $deleteButton.prop('disabled', !$savedPlaylistsSelect.val());
+        });
+    });
+
+    $('#loadAllSongs').on('click', function () {
+        if (!confirmDiscardPlaylistChanges()) {
+            return;
+        }
+        $playlistItems.find('.playlist-item, .playlist-empty').remove();
+        allSongs.forEach(function ($song) {
+            $playlistItems.append(buildPlaylistItem(
+                $song.data('song-id'),
+                $song.data('title'),
+                $song.data('artist')
+            ));
+        });
+
+        renderEmptyState();
+        updatePlaylistCount();
+        savePlaylistState();
+    });
+
     loadPlaylistState();
+    loadSavedPlaylists();
     updatePlaylistCount();
 });

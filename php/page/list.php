@@ -34,11 +34,15 @@ ksort($availableLetters);
                             <select class="form-select form-select-sm bg-dark text-white border-secondary" id="savedPlaylistsSelect" style="max-width: 220px;">
                                 <option value="">-- Mentett listák --</option>
                             </select>
+                            <button type="button" class="btn btn-sm btn-outline-danger" id="deleteSavedPlaylistBtn" disabled>Lista törlése</button>
                             <div class="btn-group">
                                 <button type="button" class="btn btn-sm btn-outline-info" id="resetPlaylist">Új lista</button>
                                 <button type="button" class="btn btn-sm btn-outline-info" id="savePlaylistBtn">Lista mentése</button>
                             </div>
                         </div>
+                    </div>
+                    <div class="w-100 mt-2" style="min-height: 1.25rem;">
+                        <span id="playlistSaveStatus" class="small text-white-50 text-truncate d-block w-100" aria-live="polite"></span>
                     </div>
 
                     <div class="row g-3">
@@ -46,7 +50,10 @@ ksort($availableLetters);
                             <div class="border border-secondary rounded p-3 bg-black bg-opacity-25">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <h5 class="mb-0">Elérhető dalok</h5>
-                                    <span class="badge bg-secondary"><?= count($songs) ?></span>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge bg-secondary"><?= count($songs) ?></span>
+                                        <button type="button" class="btn btn-sm btn-outline-info" id="loadAllSongs">Összes dal betöltése</button>
+                                    </div>
                                 </div>
                                 <div class="d-flex flex-wrap gap-1 mb-3" id="alphabetFilter">
                                     <?php foreach (range('A', 'Z') as $letter): ?>
@@ -54,6 +61,7 @@ ksort($availableLetters);
                                         <button type="button" class="btn btn-xs btn-outline-info<?= $isActive ? '' : ' disabled' ?>" data-letter="<?= $letter ?>"<?= $isActive ? '' : ' disabled' ?>><?= $letter ?></button>
                                     <?php endforeach; ?>
                                 </div>
+                                <input type="search" class="form-control form-control-sm bg-dark text-white border-secondary mb-2" id="songSearch" placeholder="Keresés cím vagy előadó alapján" aria-label="Keresés cím vagy előadó alapján">
                                 <div class="list-group list-group-dark-custom" id="availableSongs">
                                     <?php
                                     $currentLetter = '';
@@ -80,6 +88,7 @@ ksort($availableLetters);
                                             </span>
                                         </div>
                                     <?php endforeach; ?>
+                                    <div class="list-group-item bg-dark border-secondary text-white-50 text-center d-none" id="songSearchEmpty">Nincs találat.</div>
                                 </div>
                             </div>
                         </div>
@@ -104,5 +113,30 @@ ksort($availableLetters);
             </div>
         </div>
 
+    </div>
+</div>
+
+<div class="modal fade" id="savePlaylistModal" tabindex="-1" aria-labelledby="savePlaylistModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border-secondary">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title" id="savePlaylistModalLabel">Lista mentése</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+            </div>
+            <div class="modal-body">
+                <p id="savePlaylistPrompt" class="mb-3"></p>
+                <div id="newPlaylistNameGroup" class="d-none">
+                    <label for="newPlaylistName" class="form-label">Új lista neve</label>
+                    <input type="text" class="form-control bg-dark text-white border-secondary" id="newPlaylistName" maxlength="120" autocomplete="off">
+                </div>
+                <div id="savePlaylistError" class="text-danger small mt-2 d-none" role="alert"></div>
+            </div>
+            <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
+                <button type="button" class="btn btn-outline-info d-none" id="updateSavedPlaylistBtn">Mentés</button>
+                <button type="button" class="btn btn-outline-info d-none" id="startSaveAsNewBtn">Mentés új néven</button>
+                <button type="button" class="btn btn-info text-dark d-none" id="createNamedPlaylistBtn">Mentés</button>
+            </div>
+        </div>
     </div>
 </div>

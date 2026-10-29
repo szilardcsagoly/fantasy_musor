@@ -14,7 +14,7 @@ if(!$included) die();
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
     
     <!-- Saját CSS -->
-    <link href="/css/fanta.css" rel="stylesheet">
+    <link href="/css/fanta.css?v=<?= filemtime(DOC_ROOT.'/css/fanta.css') ?>" rel="stylesheet">
     <link href="/css/lista.css" rel="stylesheet">
     
     <?=$plusmeta;?>

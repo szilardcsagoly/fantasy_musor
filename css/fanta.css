@@ -116,7 +116,7 @@ body {
 
 .sticky-top-control {
     position: sticky !important;
-    top: 52px !important; /* Pontosan a menü magassága, így alá ragad be */
+    top: var(--live-sticky-top, 52px) !important;
     padding-top: 8px;
     padding-bottom: 8px;
     margin-bottom: 15px;

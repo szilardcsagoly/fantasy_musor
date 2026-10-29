@@ -73,6 +73,17 @@
     <div class="mb-3 border-bottom border-secondary pb-2">
         <h2 id="liveDisplayTitle" class="m-0 text-warning fw-bold">Nincs dal kiválasztva</h2>
         <p id="liveDisplayArtist" class="m-0 text-white-50 fs-5"></p>
+        <div id="livePlaylistControls" class="d-flex align-items-center gap-2 flex-wrap mt-2">
+            <label for="livePlaylistSelect" class="small text-white-50 mb-0">Műsorlista</label>
+            <select id="livePlaylistSelect" class="form-select form-select-sm bg-dark text-white border-secondary" style="width: auto; min-width: 180px; max-width: 100%;">
+                <option value="">-- Mentett lista --</option>
+            </select>
+            <div class="btn-group btn-group-sm" role="group" aria-label="Léptetés a műsorlistában">
+                <button type="button" class="btn btn-outline-light" id="livePlaylistPrevious" disabled>Előző</button>
+                <button type="button" class="btn btn-outline-light" id="livePlaylistNext" disabled>Következő</button>
+            </div>
+            <span id="livePlaylistPosition" class="small text-white-50" aria-live="polite"></span>
+        </div>
     </div>
 
     <!-- A: PROMPTER NÉZET -->
@@ -126,14 +137,3 @@
         </div>
     </div>
 </div>
-<script>
-  $(document).on('click', '.prompter-row', function() {
-    let syncBtn = $('#btnScrollSync');
-    
-    // Szöveg átírása és a sárga figyelmeztető szín (btn-warning) beállítása
-    syncBtn.text('⚠ Irányítás átadása');
-    syncBtn.removeClass('btn-dark text-white').addClass('btn-warning text-dark');
-    
-    // Itt futhat a meglévő logikád (pl. görgetés vagy socket küldés a zenekarnak)
-});  
-</script>

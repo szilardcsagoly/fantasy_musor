@@ -24,6 +24,7 @@ $(document).ready(function() {
         $('.item-select-trigger').click(function() {
             var id = $(this).data('id');
             $.post('/php/api/set_active.php', { id: id }, function() {
+                sessionStorage.setItem('fantaTakeScrollControl', '1');
                 window.location.href = '/live/';
             });
         });
@@ -54,11 +55,31 @@ $(document).ready(function() {
         var isEditorMode = false;
         var syncTimer = null;
         var saveTimeout = null;
+        var livePlaylistSongs = [];
+        var livePlaylistRequest = 0;
+        var livePlaylistStorageKey = 'fantaLivePlaylistId';
+        var pendingActiveSongId = 0;
+        var songDetailsRequest = 0;
+        var scrollSyncTimeout = null;
+        var lastSentScrollLine = 0;
+        var scrollControlStorageKey = 'fantaTakeScrollControl';
         
         // JAVÍTOTT SZINKRON VÁLTOZÓK
         var isSyncLocked = false; 
         var lastServerLine = 0; 
         var iamTheKarmester = false; // ÚJ: True lesz, ha én bökök rá a sorokra, így védve vagyok a visszarángatástól!
+
+        function updateLiveStickyOffset() {
+            var navbarHeight = $('.navbar').first().outerHeight() || 0;
+            document.documentElement.style.setProperty('--live-sticky-top', navbarHeight + 'px');
+        }
+
+        function getPrompterSyncOffset() {
+            return ($('.navbar').first().outerHeight() || 0) + ($('.sticky-top-control').outerHeight() || 0) + 24;
+        }
+
+        updateLiveStickyOffset();
+        $(window).on('resize orientationchange', updateLiveStickyOffset);
 
         const scaleSharp = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -150,17 +171,21 @@ $(document).ready(function() {
             var id = $(this).val(); if(!id) { $('#search_artist_display').val(''); return; }
             var artistName = localSongsCache[id] ? localSongsCache[id] : ''; $('#search_artist_display').val(artistName);
             if($('#followBandSwitch').is(':checked') && !isEditorMode) {
-                iamTheKarmester = true;
-                $.post('/php/api/set_active.php', { id: id }, function() { loadSongDetails(id); });
+                activateSharedSong(id);
             } else { loadSongDetails(id); }
             setTimeout(function() { $('#collapseSearch').collapse('hide'); }, 400);
         });
 
         // --- ADATBETÖLTŐ FÜGGVÉNY ---
-        function loadSongDetails(id) {
+        function loadSongDetails(id, keepLocalControl) {
             id = parseInt(id); if(isNaN(id) || id <= 0) return;
+            var requestId = ++songDetailsRequest;
             $.getJSON('/php/api/get_songs.php', { id: id }, function(song) {
+                if (requestId !== songDetailsRequest) return;
                 if (song && song.dalszoveg !== undefined) {
+                    var takeScrollControl = keepLocalControl || sessionStorage.getItem(scrollControlStorageKey) === '1';
+                    if (takeScrollControl) sessionStorage.removeItem(scrollControlStorageKey);
+                    if (activeSongId !== id) lastSentScrollLine = 0;
                     activeSongId = id; currentRawLyrics = song.dalszoveg;
                     $('#liveDisplayTitle').text(song.dalnev); $('#liveDisplayArtist').text(song.eloado);
                     $('#prompterOutput').html(parseChordPro(song.dalszoveg));
@@ -170,10 +195,119 @@ $(document).ready(function() {
                     $('#editorPreviewOutput').html(parseChordPro(song.dalszoveg)); 
                     lastServerLine = 0; 
                     resetSyncState();
+                    if (takeScrollControl && $('#followBandSwitch').is(':checked') && !isEditorMode) {
+                        iamTheKarmester = true;
+                        $('#btnScrollSync').removeClass('btn-outline-secondary disabled btn-dark text-white-50').addClass('btn-warning text-dark').text('👋 Követés / Irányítás átadása');
+                    }
+                    updateLivePlaylistNavigation();
                     $('html, body').scrollTop(0); 
+                    if (takeScrollControl) {
+                        setTimeout(function() {
+                            if ($('#followBandSwitch').is(':checked') && !isEditorMode && iamTheKarmester) {
+                                publishScrollLine(getVisiblePrompterLine());
+                            }
+                        }, 250);
+                    }
                 }
             });
         }
+
+        function activateSharedSong(id) {
+            var songId = parseInt(id);
+            if (isNaN(songId) || songId <= 0) return;
+
+            pendingActiveSongId = songId;
+            $.post('/php/api/set_active.php', { id: songId }).done(function() {
+                if (pendingActiveSongId === songId) pendingActiveSongId = 0;
+            }).fail(function() {
+                if (pendingActiveSongId === songId) pendingActiveSongId = 0;
+                $('#livePlaylistPosition').text('A közös dalváltás nem sikerült.');
+            });
+
+            loadSongDetails(songId, true);
+        }
+
+        function updateLivePlaylistNavigation() {
+            var currentIndex = livePlaylistSongs.findIndex(function(song) {
+                return parseInt(song.id) === activeSongId;
+            });
+            var hasSongs = livePlaylistSongs.length > 0;
+            var isOutsidePlaylist = currentIndex === -1;
+
+            $('#livePlaylistPrevious').prop('disabled', !hasSongs || (!isOutsidePlaylist && currentIndex === 0));
+            $('#livePlaylistNext').prop('disabled', !hasSongs || (!isOutsidePlaylist && currentIndex === livePlaylistSongs.length - 1));
+            $('#livePlaylistPosition').text(currentIndex === -1 ? (hasSongs ? 'A jelenlegi dal nincs ebben a listában' : '') : (currentIndex + 1) + ' / ' + livePlaylistSongs.length);
+        }
+
+        function moveWithinLivePlaylist(direction) {
+            if (!livePlaylistSongs.length) return;
+
+            var currentIndex = livePlaylistSongs.findIndex(function(song) {
+                return parseInt(song.id) === activeSongId;
+            });
+            var targetIndex = currentIndex === -1
+                ? (direction > 0 ? 0 : livePlaylistSongs.length - 1)
+                : currentIndex + direction;
+
+            if (targetIndex < 0 || targetIndex >= livePlaylistSongs.length) return;
+
+            var songId = parseInt(livePlaylistSongs[targetIndex].id);
+            if ($('#followBandSwitch').is(':checked') && !isEditorMode) {
+                activateSharedSong(songId);
+            } else {
+                loadSongDetails(songId);
+            }
+        }
+
+        function loadLivePlaylists() {
+            $.getJSON('/php/api/saved_playlists.php', function(playlists) {
+                var $select = $('#livePlaylistSelect');
+                $select.find('option:not(:first)').remove();
+                $.each(playlists, function(index, playlist) {
+                    $select.append(new Option(playlist.name, playlist.id));
+                });
+
+                var rememberedId = localStorage.getItem(livePlaylistStorageKey);
+                if (rememberedId && $select.find('option[value="' + rememberedId + '"]').length) {
+                    $select.val(rememberedId).trigger('change');
+                } else {
+                    localStorage.removeItem(livePlaylistStorageKey);
+                    updateLivePlaylistNavigation();
+                }
+            });
+        }
+
+        $('#livePlaylistSelect').on('change', function() {
+            var playlistId = $(this).val();
+            var requestId = ++livePlaylistRequest;
+            if (!playlistId) {
+                livePlaylistSongs = [];
+                localStorage.removeItem(livePlaylistStorageKey);
+                updateLivePlaylistNavigation();
+                return;
+            }
+
+            $.getJSON('/php/api/saved_playlists.php', { id: playlistId }, function(result) {
+                if (requestId !== livePlaylistRequest) return;
+                livePlaylistSongs = Array.isArray(result.playlist) ? result.playlist : [];
+                localStorage.setItem(livePlaylistStorageKey, String(result.id));
+                updateLivePlaylistNavigation();
+            }).fail(function() {
+                if (requestId !== livePlaylistRequest) return;
+                livePlaylistSongs = [];
+                localStorage.removeItem(livePlaylistStorageKey);
+                $('#livePlaylistPosition').text('A műsorlista betöltése nem sikerült.');
+                updateLivePlaylistNavigation();
+            });
+        });
+
+        $('#livePlaylistPrevious').on('click', function() {
+            moveWithinLivePlaylist(-1);
+        });
+
+        $('#livePlaylistNext').on('click', function() {
+            moveWithinLivePlaylist(1);
+        });
 
         function resetSyncState() {
             isSyncLocked = false; 
@@ -199,10 +333,47 @@ $(document).ready(function() {
                 .addClass('btn-warning text-dark')
                 .text('👋 Követés / Irányítás átadása');
 
-            $.post('/php/api/set_scroll.php', { szazalek: lineNum }, function() {
-                console.log("Sor elmentve: " + lineNum);
-            });
+            publishScrollLine(lineNum);
         });
+
+        function publishScrollLine(lineNum) {
+            lineNum = parseInt(lineNum);
+            if (lineNum < 1 || lineNum === lastSentScrollLine) return;
+
+            lastSentScrollLine = lineNum;
+            lastServerLine = lineNum;
+            $('.prompter-row').removeClass('active-stage-line');
+            $('.prompter-row[data-line="' + lineNum + '"]').addClass('active-stage-line');
+            $.post('/php/api/set_scroll.php', { szazalek: lineNum });
+        }
+
+        function getVisiblePrompterLine() {
+            var stickyOffset = getPrompterSyncOffset();
+            var visibleLine = 0;
+
+            $('.prompter-row').each(function() {
+                if (this.getBoundingClientRect().top >= stickyOffset) {
+                    visibleLine = parseInt($(this).data('line')) || 0;
+                    return false;
+                }
+            });
+
+            return visibleLine;
+        }
+
+        function syncLeaderScrollPosition() {
+            if (isEditorMode || !$('#followBandSwitch').is(':checked') || !iamTheKarmester) return;
+
+            clearTimeout(scrollSyncTimeout);
+            scrollSyncTimeout = setTimeout(function() {
+                if (isEditorMode || !$('#followBandSwitch').is(':checked') || !iamTheKarmester) return;
+
+                var lineNum = getVisiblePrompterLine();
+                publishScrollLine(lineNum);
+            }, 180);
+        }
+
+        $(window).on('scroll', syncLeaderScrollPosition);
 
                 // Manuális gördülés detektálása (Csak a csendes követőknél vált ki kizárást)
         $(window).on('wheel touchmove', function(e) {
@@ -231,7 +402,7 @@ $(document).ready(function() {
             var $targetRow = $('.prompter-row[data-line="' + lineNum + '"]');
             if ($targetRow.length) {
                 $('.prompter-row').removeClass('active-stage-line'); $targetRow.addClass('active-stage-line');
-                var targetOffset = $targetRow.offset().top - 180; $('html, body').stop().animate({ scrollTop: targetOffset }, 500);
+                var targetOffset = $targetRow.offset().top - getPrompterSyncOffset(); $('html, body').stop().animate({ scrollTop: targetOffset }, 500);
             }
         }
 
@@ -241,6 +412,7 @@ $(document).ready(function() {
                 if ($('#followBandSwitch').is(':checked') && !isEditorMode) {
                     $.getJSON('/php/api/get_active.php?_=' + new Date().getTime(), function(res) {
                         if (res && res.aktiv_dal_id > 0) {
+                            if (pendingActiveSongId && res.aktiv_dal_id !== pendingActiveSongId) return;
                             
                             // 1. Ha a szerveren megváltozott a dal ID: Mindenki tiszta lappal követi!
                             if (res.aktiv_dal_id !== activeSongId) {
@@ -396,14 +568,16 @@ $(document).ready(function() {
             isEditorMode = !isEditorMode;
             if(isEditorMode) {
                 $(this).text("📺 Élő nézet (Live)").removeClass("btn-success").addClass("btn-primary");
-                $('#livePrompterContainer, #followSwitchWrapper, #sliderWrapper, #btnScrollSync').addClass('d-none');
+                $('#livePrompterContainer, #followSwitchWrapper, #sliderWrapper, #btnScrollSync, #livePlaylistControls').addClass('d-none');
                 $('#liveEditorContainer, #transposeWrapper').removeClass('d-none');
             } else {
                 $(this).text("📝 Szerkesztés").removeClass("btn-primary").addClass("btn-success");
-                $('#livePrompterContainer, #followSwitchWrapper, #sliderWrapper, #btnScrollSync').removeClass('d-none');
+                $('#livePrompterContainer, #followSwitchWrapper, #sliderWrapper, #btnScrollSync, #livePlaylistControls').removeClass('d-none');
                 $('#liveEditorContainer, #transposeWrapper').addClass('d-none'); loadSongDetails(activeSongId);
             }
         });
+
+        loadLivePlaylists();
 
         $('#editTitle, #editArtist, #editLyrics').on('input', function() {
             $('#editorPreviewOutput').html(parseChordPro($('#editLyrics').val()));

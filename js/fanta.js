@@ -57,12 +57,21 @@ $(document).ready(function() {
         var saveTimeout = null;
         var livePlaylistSongs = [];
         var livePlaylistRequest = 0;
-        var livePlaylistStorageKey = 'fantaLivePlaylistId';
+        var livePlaylistId = 0;
+        var livePlaylistUpdatedAt = '';
+        var pendingLivePlaylistId = null;
         var pendingActiveSongId = 0;
         var songDetailsRequest = 0;
         var scrollSyncTimeout = null;
         var lastSentScrollLine = 0;
         var scrollControlStorageKey = 'fantaTakeScrollControl';
+        var screenWakeLock = null;
+        var screenWakeEnabled = false;
+        var screenWakeDeadline = 0;
+        var screenWakeDurationMs = 5 * 60 * 1000;
+        var screenWakeTicker = null;
+        var lastObservedSharedSongId = null;
+        var lastObservedSharedScrollLine = null;
         
         // JAVÍTOTT SZINKRON VÁLTOZÓK
         var isSyncLocked = false; 
@@ -77,6 +86,122 @@ $(document).ready(function() {
         function getPrompterSyncOffset() {
             return ($('.navbar').first().outerHeight() || 0) + ($('.sticky-top-control').outerHeight() || 0) + 24;
         }
+
+        function stopScreenWakeLock(message) {
+            screenWakeEnabled = false;
+            screenWakeDeadline = 0;
+            clearInterval(screenWakeTicker);
+            screenWakeTicker = null;
+            $('#screenWakeToggle').prop('checked', false);
+            $('#screenWakeDuration').prop('disabled', true);
+
+            var lock = screenWakeLock;
+            screenWakeLock = null;
+            if (lock) lock.release().catch(function() {});
+
+            $('#screenWakeStatus').text(message || 'Kikapcsolva');
+        }
+
+        function expireScreenWakeLock() {
+            screenWakeDeadline = 0;
+            clearInterval(screenWakeTicker);
+            screenWakeTicker = null;
+
+            var lock = screenWakeLock;
+            screenWakeLock = null;
+            if (lock) lock.release().catch(function() {});
+
+            $('#screenWakeStatus').text('Lejárt · aktivitásra újraindul');
+        }
+
+        function updateScreenWakeStatus() {
+            if (!screenWakeEnabled) return;
+
+            var remaining = Math.ceil((screenWakeDeadline - Date.now()) / 1000);
+            if (remaining <= 0) {
+                expireScreenWakeLock();
+                return;
+            }
+
+            var minutes = Math.floor(remaining / 60);
+            var seconds = String(remaining % 60).padStart(2, '0');
+            $('#screenWakeStatus').text('Ébren tartás · ' + minutes + ':' + seconds);
+        }
+
+        function resetScreenWakeTimer() {
+            if (!screenWakeEnabled) return;
+            screenWakeDeadline = Date.now() + screenWakeDurationMs;
+            updateScreenWakeStatus();
+            if (!screenWakeTicker) screenWakeTicker = setInterval(updateScreenWakeStatus, 1000);
+            requestScreenWakeLock();
+        }
+
+        function requestScreenWakeLock() {
+            if (!screenWakeEnabled || screenWakeDeadline <= Date.now() || document.visibilityState !== 'visible' || screenWakeLock) return;
+            if (!navigator.wakeLock || !navigator.wakeLock.request) {
+                stopScreenWakeLock('Ez a böngésző nem támogatja a képernyő ébren tartását');
+                return;
+            }
+
+            navigator.wakeLock.request('screen').then(function(lock) {
+                if (!screenWakeEnabled || screenWakeDeadline <= Date.now()) {
+                    return lock.release();
+                }
+
+                screenWakeLock = lock;
+                lock.addEventListener('release', function() {
+                    if (screenWakeLock === lock) screenWakeLock = null;
+                    if (screenWakeEnabled && screenWakeDeadline > Date.now()) {
+                        $('#screenWakeStatus').text('A rendszer feloldotta a képernyőzárat');
+                    }
+                }, { once: true });
+                updateScreenWakeStatus();
+            }).catch(function() {
+                stopScreenWakeLock('A böngésző nem engedélyezte az ébren tartást');
+            });
+        }
+
+        function observeSharedPlaybackActivity(state) {
+            var songId = parseInt(state.aktiv_dal_id) || 0;
+            var scrollLine = parseInt(state.scroll_szazalek) || 0;
+            if (lastObservedSharedSongId !== null && (songId !== lastObservedSharedSongId || scrollLine !== lastObservedSharedScrollLine)) {
+                resetScreenWakeTimer();
+            }
+            lastObservedSharedSongId = songId;
+            lastObservedSharedScrollLine = scrollLine;
+        }
+
+        $('#screenWakeToggle').on('change', function() {
+            if (!this.checked) {
+                stopScreenWakeLock();
+                return;
+            }
+
+            if (!navigator.wakeLock || !navigator.wakeLock.request) {
+                stopScreenWakeLock('Ez a böngésző nem támogatja a képernyő ébren tartását');
+                return;
+            }
+
+            screenWakeEnabled = true;
+            screenWakeDurationMs = (parseInt($('#screenWakeDuration').val(), 10) || 5) * 60 * 1000;
+            $('#screenWakeDuration').prop('disabled', false);
+            resetScreenWakeTimer();
+        });
+
+        $('#screenWakeDuration').on('change', function() {
+            screenWakeDurationMs = (parseInt($(this).val(), 10) || 5) * 60 * 1000;
+            resetScreenWakeTimer();
+        });
+
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible' && screenWakeEnabled) {
+                if (screenWakeDeadline <= Date.now()) {
+                    expireScreenWakeLock();
+                } else {
+                    requestScreenWakeLock();
+                }
+            }
+        });
 
         updateLiveStickyOffset();
         $(window).on('resize orientationchange', updateLiveStickyOffset);
@@ -185,7 +310,10 @@ $(document).ready(function() {
                 if (song && song.dalszoveg !== undefined) {
                     var takeScrollControl = keepLocalControl || sessionStorage.getItem(scrollControlStorageKey) === '1';
                     if (takeScrollControl) sessionStorage.removeItem(scrollControlStorageKey);
-                    if (activeSongId !== id) lastSentScrollLine = 0;
+                    if (activeSongId !== id) {
+                        lastSentScrollLine = 0;
+                        resetScreenWakeTimer();
+                    }
                     activeSongId = id; currentRawLyrics = song.dalszoveg;
                     $('#liveDisplayTitle').text(song.dalnev); $('#liveDisplayArtist').text(song.eloado);
                     $('#prompterOutput').html(parseChordPro(song.dalszoveg));
@@ -216,6 +344,7 @@ $(document).ready(function() {
             var songId = parseInt(id);
             if (isNaN(songId) || songId <= 0) return;
 
+            resetScreenWakeTimer();
             pendingActiveSongId = songId;
             $.post('/php/api/set_active.php', { id: songId }).done(function() {
                 if (pendingActiveSongId === songId) pendingActiveSongId = 0;
@@ -232,11 +361,63 @@ $(document).ready(function() {
                 return parseInt(song.id) === activeSongId;
             });
             var hasSongs = livePlaylistSongs.length > 0;
-            var isOutsidePlaylist = currentIndex === -1;
+            var previousSong = currentIndex === -1
+                ? (hasSongs ? livePlaylistSongs[livePlaylistSongs.length - 1] : null)
+                : (currentIndex > 0 ? livePlaylistSongs[currentIndex - 1] : null);
+            var nextSong = currentIndex === -1
+                ? (hasSongs ? livePlaylistSongs[0] : null)
+                : (currentIndex < livePlaylistSongs.length - 1 ? livePlaylistSongs[currentIndex + 1] : null);
 
-            $('#livePlaylistPrevious').prop('disabled', !hasSongs || (!isOutsidePlaylist && currentIndex === 0));
-            $('#livePlaylistNext').prop('disabled', !hasSongs || (!isOutsidePlaylist && currentIndex === livePlaylistSongs.length - 1));
+            $('#livePlaylistDock').toggleClass('d-none', !hasSongs || isEditorMode);
+            $('#livePlaylistPrevious').prop('disabled', !previousSong);
+            $('#livePlaylistPreviousTitle').text(previousSong ? previousSong.title : 'A lista elején').attr('title', previousSong ? previousSong.title : 'A lista elején');
+            $('#livePlaylistNext').prop('disabled', !nextSong);
+            $('#livePlaylistNextTitle').text(nextSong ? nextSong.title : 'A lista végén').attr('title', nextSong ? nextSong.title : 'A lista végén');
             $('#livePlaylistPosition').text(currentIndex === -1 ? (hasSongs ? 'A jelenlegi dal nincs ebben a listában' : '') : (currentIndex + 1) + ' / ' + livePlaylistSongs.length);
+        }
+
+        function applyLivePlaylistSelection(playlistId, playlistName, updatedAt) {
+            var id = parseInt(playlistId) || 0;
+            if (pendingLivePlaylistId !== null && id !== pendingLivePlaylistId) return;
+
+            if (!id) {
+                livePlaylistId = 0;
+                livePlaylistUpdatedAt = '';
+                livePlaylistSongs = [];
+                $('#livePlaylistSelect').val('');
+                $('#playlistSaveStatus').text('');
+                updateLivePlaylistNavigation();
+                return;
+            }
+
+            $('#livePlaylistSelect').val(String(id));
+            var version = String(updatedAt || '');
+            if (livePlaylistId === id && livePlaylistUpdatedAt === version && livePlaylistSongs.length) {
+                updateLivePlaylistNavigation();
+                return;
+            }
+
+            livePlaylistId = id;
+            livePlaylistUpdatedAt = version;
+            var requestId = ++livePlaylistRequest;
+            $.getJSON('/php/api/saved_playlists.php', { id: id }, function(result) {
+                if (requestId !== livePlaylistRequest || livePlaylistId !== id) return;
+                livePlaylistSongs = Array.isArray(result.playlist) ? result.playlist : [];
+                $('#livePlaylistSelect').val(String(result.id));
+                $('#playlistSaveStatus').text(result.name || playlistName || '');
+                updateLivePlaylistNavigation();
+            }).fail(function() {
+                if (requestId !== livePlaylistRequest) return;
+                livePlaylistSongs = [];
+                $('#playlistSaveStatus').text('A műsorlista tartalmát nem sikerült betölteni.');
+                updateLivePlaylistNavigation();
+            });
+        }
+
+        function refreshLivePlaylistSelection() {
+            $.getJSON('/php/api/get_active.php', function(state) {
+                applyLivePlaylistSelection(state.live_playlist_id, state.live_playlist_name, state.live_playlist_updated_at);
+            });
         }
 
         function moveWithinLivePlaylist(direction) {
@@ -266,39 +447,47 @@ $(document).ready(function() {
                 $.each(playlists, function(index, playlist) {
                     $select.append(new Option(playlist.name, playlist.id));
                 });
-
-                var rememberedId = localStorage.getItem(livePlaylistStorageKey);
-                if (rememberedId && $select.find('option[value="' + rememberedId + '"]').length) {
-                    $select.val(rememberedId).trigger('change');
-                } else {
-                    localStorage.removeItem(livePlaylistStorageKey);
-                    updateLivePlaylistNavigation();
-                }
+                refreshLivePlaylistSelection();
             });
         }
 
         $('#livePlaylistSelect').on('change', function() {
             var playlistId = $(this).val();
             var requestId = ++livePlaylistRequest;
+            $(this).prop('disabled', true);
             if (!playlistId) {
-                livePlaylistSongs = [];
-                localStorage.removeItem(livePlaylistStorageKey);
-                updateLivePlaylistNavigation();
+                pendingLivePlaylistId = 0;
+                $.post('/php/api/saved_playlists.php', { action: 'deactivate' })
+                    .done(function() {
+                        pendingLivePlaylistId = null;
+                        refreshLivePlaylistSelection();
+                    })
+                    .fail(function() {
+                        pendingLivePlaylistId = null;
+                        $('#playlistSaveStatus').text('Az aktív műsorlistát nem sikerült törölni.');
+                        $('#livePlaylistSelect').val(livePlaylistId || '');
+                    })
+                    .always(function() {
+                        $('#livePlaylistSelect').prop('disabled', false);
+                    });
                 return;
             }
 
-            $.getJSON('/php/api/saved_playlists.php', { id: playlistId }, function(result) {
-                if (requestId !== livePlaylistRequest) return;
-                livePlaylistSongs = Array.isArray(result.playlist) ? result.playlist : [];
-                localStorage.setItem(livePlaylistStorageKey, String(result.id));
-                updateLivePlaylistNavigation();
-            }).fail(function() {
-                if (requestId !== livePlaylistRequest) return;
-                livePlaylistSongs = [];
-                localStorage.removeItem(livePlaylistStorageKey);
-                $('#livePlaylistPosition').text('A műsorlista betöltése nem sikerült.');
-                updateLivePlaylistNavigation();
-            });
+            pendingLivePlaylistId = parseInt(playlistId);
+            $.post('/php/api/saved_playlists.php', { action: 'activate', id: playlistId })
+                .done(function() {
+                    pendingLivePlaylistId = null;
+                    refreshLivePlaylistSelection();
+                })
+                .fail(function() {
+                    if (requestId !== livePlaylistRequest) return;
+                    pendingLivePlaylistId = null;
+                    $('#playlistSaveStatus').text('Az aktív műsorlistát nem sikerült kiválasztani.');
+                    $('#livePlaylistSelect').val(livePlaylistId || '');
+                })
+                .always(function() {
+                    $('#livePlaylistSelect').prop('disabled', false);
+                });
         });
 
         $('#livePlaylistPrevious').on('click', function() {
@@ -340,6 +529,7 @@ $(document).ready(function() {
             lineNum = parseInt(lineNum);
             if (lineNum < 1 || lineNum === lastSentScrollLine) return;
 
+            resetScreenWakeTimer();
             lastSentScrollLine = lineNum;
             lastServerLine = lineNum;
             $('.prompter-row').removeClass('active-stage-line');
@@ -409,8 +599,14 @@ $(document).ready(function() {
         // --- INTELLIGENS POLLING SZINKRON MOTOR ---
         function startSync() {
             syncTimer = setInterval(function() {
-                if ($('#followBandSwitch').is(':checked') && !isEditorMode) {
+                var followBand = $('#followBandSwitch').is(':checked');
+                if (!isEditorMode && (followBand || screenWakeEnabled)) {
                     $.getJSON('/php/api/get_active.php?_=' + new Date().getTime(), function(res) {
+                        if (res) {
+                            applyLivePlaylistSelection(res.live_playlist_id, res.live_playlist_name, res.live_playlist_updated_at);
+                            observeSharedPlaybackActivity(res);
+                        }
+                        if (!followBand) return;
                         if (res && res.aktiv_dal_id > 0) {
                             if (pendingActiveSongId && res.aktiv_dal_id !== pendingActiveSongId) return;
                             
@@ -568,12 +764,13 @@ $(document).ready(function() {
             isEditorMode = !isEditorMode;
             if(isEditorMode) {
                 $(this).text("📺 Élő nézet (Live)").removeClass("btn-success").addClass("btn-primary");
-                $('#livePrompterContainer, #followSwitchWrapper, #sliderWrapper, #btnScrollSync, #livePlaylistControls').addClass('d-none');
+                $('#livePrompterContainer, #followSwitchWrapper, #sliderWrapper, #btnScrollSync, #livePlaylistControls, #livePlaylistDock').addClass('d-none');
                 $('#liveEditorContainer, #transposeWrapper').removeClass('d-none');
             } else {
                 $(this).text("📝 Szerkesztés").removeClass("btn-primary").addClass("btn-success");
                 $('#livePrompterContainer, #followSwitchWrapper, #sliderWrapper, #btnScrollSync, #livePlaylistControls').removeClass('d-none');
                 $('#liveEditorContainer, #transposeWrapper').addClass('d-none'); loadSongDetails(activeSongId);
+                updateLivePlaylistNavigation();
             }
         });
 

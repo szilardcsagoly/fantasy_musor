@@ -19,14 +19,39 @@ $mysqli->query("CREATE TABLE IF NOT EXISTS saved_playlists (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+$mysqli->query("CREATE TABLE IF NOT EXISTS live_playlist_selection (
+    id TINYINT NOT NULL PRIMARY KEY,
+    playlist_id INT NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    if (isset($_GET['active'])) {
+        $result = $mysqli->query('SELECT p.id, p.name, p.updated_at FROM live_playlist_selection AS s INNER JOIN saved_playlists AS p ON p.id = s.playlist_id WHERE s.id = 1');
+        if (!$result) {
+            respond(['success' => false, 'message' => 'Az aktív műsorlista lekérdezése nem sikerült.'], 500);
+        }
+
+        $playlist = $result->fetch_assoc();
+        if (!$playlist) {
+            respond(null);
+        }
+
+        respond([
+            'id' => (int)$playlist['id'],
+            'name' => $playlist['name'],
+            'updated_at' => $playlist['updated_at']
+        ]);
+    }
+
     $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
     if ($id > 0) {
-        $statement = $mysqli->prepare('SELECT id, name, state_json FROM saved_playlists WHERE id = ?');
-        $statement->bind_param('i', $id);
-        $statement->execute();
-        $playlist = $statement->get_result()->fetch_assoc();
+        $result = $mysqli->query("SELECT id, name, state_json FROM saved_playlists WHERE id = $id");
+        if (!$result) {
+            respond(['success' => false, 'message' => 'A mentett lista lekérdezése nem sikerült.'], 500);
+        }
+
+        $playlist = $result->fetch_assoc();
         if (!$playlist) {
             respond(['success' => false, 'message' => 'A mentett lista nem található.'], 404);
         }
@@ -63,7 +88,33 @@ if ($action === 'delete') {
     if ($statement->affected_rows !== 1) {
         respond(['success' => false, 'message' => 'A mentett lista nem található.'], 404);
     }
+    $mysqli->query("DELETE FROM live_playlist_selection WHERE id = 1 AND playlist_id = $id");
 
+    respond(['success' => true]);
+}
+
+if ($action === 'activate') {
+    $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+    if ($id < 1) {
+        respond(['success' => false, 'message' => 'Érvénytelen listaazonosító.'], 400);
+    }
+
+    $result = $mysqli->query("SELECT id FROM saved_playlists WHERE id = $id");
+    if (!$result || !$result->num_rows) {
+        respond(['success' => false, 'message' => 'A mentett lista nem található.'], 404);
+    }
+
+    if (!$mysqli->query("INSERT INTO live_playlist_selection (id, playlist_id) VALUES (1, $id) ON DUPLICATE KEY UPDATE playlist_id = $id")) {
+        respond(['success' => false, 'message' => 'Az aktív műsorlista mentése nem sikerült.'], 500);
+    }
+
+    respond(['success' => true, 'id' => $id]);
+}
+
+if ($action === 'deactivate') {
+    if (!$mysqli->query('DELETE FROM live_playlist_selection WHERE id = 1')) {
+        respond(['success' => false, 'message' => 'Az aktív műsorlista törlése nem sikerült.'], 500);
+    }
     respond(['success' => true]);
 }
 
@@ -86,12 +137,13 @@ if ($action === 'update') {
     $statement = $mysqli->prepare('SELECT id, name FROM saved_playlists WHERE id = ?');
     $statement->bind_param('i', $id);
     $statement->execute();
-    $playlist = $statement->get_result()->fetch_assoc();
-    if (!$playlist) {
+    $statement->bind_result($playlistId, $playlistName);
+    if (!$statement->fetch()) {
         respond(['success' => false, 'message' => 'A mentett lista nem található.'], 404);
     }
+    $statement->close();
 
-    respond(['success' => true, 'id' => (int)$playlist['id'], 'name' => $playlist['name']]);
+    respond(['success' => true, 'id' => (int)$playlistId, 'name' => $playlistName]);
 }
 
 if ($action === 'create') {

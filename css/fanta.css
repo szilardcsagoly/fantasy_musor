@@ -121,3 +121,65 @@ body {
     padding-bottom: 8px;
     margin-bottom: 15px;
 }
+
+#liveMainContainer {
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom)) !important;
+}
+
+.live-playlist-dock {
+    position: fixed;
+    z-index: 1080;
+    left: 50%;
+    bottom: max(0.5rem, env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    width: min(48rem, calc(100vw - 1rem));
+    padding: 0.5rem;
+    border: 1px solid #495057;
+    border-radius: 0.5rem;
+    background: rgba(0, 0, 0, 0.96);
+    box-shadow: 0 -0.5rem 1.5rem rgba(0, 0, 0, 0.45);
+}
+
+.live-playlist-button {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    min-width: 0;
+    min-height: 3.75rem;
+    padding: 0.45rem 0.65rem;
+    text-align: left;
+}
+
+.live-playlist-button:disabled {
+    opacity: 0.65;
+}
+
+.live-playlist-direction {
+    width: 100%;
+    color: #adb5bd;
+    font-size: 0.7rem;
+    line-height: 1.2;
+}
+
+.live-playlist-button-title {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+@media (min-width: 768px) and (orientation: landscape) {
+    .live-playlist-dock {
+        left: auto;
+        right: 1rem;
+        transform: none;
+        width: min(32rem, calc(100vw - 2rem));
+    }
+}

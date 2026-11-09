@@ -3,7 +3,13 @@ $included = strtolower(realpath(__FILE__)) != strtolower(realpath($_SERVER['SCRI
 if(!$included) die();
 
 
-define('REMOTE_ADDR', isset($_SERVER['HTTP_X_FORWARDED_FOR'])?reset(explode(',',$_SERVER['HTTP_X_FORWARDED_FOR'])):$_SERVER['REMOTE_ADDR']);
+if (isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+	$forwardedAddresses = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
+	$remoteAddress = trim(reset($forwardedAddresses));
+} else {
+	$remoteAddress = $_SERVER['REMOTE_ADDR'];
+}
+define('REMOTE_ADDR', $remoteAddress);
 
 
 ini_set('max_execution_time', 300);

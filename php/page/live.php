@@ -64,6 +64,18 @@
             <span class="small fw-bold text-white-50">Betűméret:</span>
             <input type="range" class="form-range" id="fontSizeSlider" min="14" max="40" value="20">
         </div>
+        <div id="screenWakeControls" class="d-flex align-items-center gap-2 flex-wrap mt-1">
+            <div class="form-check form-switch m-0">
+                <input class="form-check-input" type="checkbox" id="screenWakeToggle">
+                <label class="form-check-label small text-white-50" for="screenWakeToggle">Képernyő ébren tartása</label>
+            </div>
+            <select id="screenWakeDuration" class="form-select form-select-sm bg-dark text-white border-secondary" aria-label="Ébren tartás időkorlátja" disabled style="width: auto;">
+                <option value="5" selected>5 perc</option>
+                <option value="10">10 perc</option>
+                <option value="15">15 perc</option>
+            </select>
+            <span id="screenWakeStatus" class="small text-white-50" aria-live="polite">Kikapcsolva</span>
+        </div>
     </div>
 </div>
 
@@ -78,10 +90,6 @@
             <select id="livePlaylistSelect" class="form-select form-select-sm bg-dark text-white border-secondary" style="width: auto; min-width: 180px; max-width: 100%;">
                 <option value="">-- Mentett lista --</option>
             </select>
-            <div class="btn-group btn-group-sm" role="group" aria-label="Léptetés a műsorlistában">
-                <button type="button" class="btn btn-outline-light" id="livePlaylistPrevious" disabled>Előző</button>
-                <button type="button" class="btn btn-outline-light" id="livePlaylistNext" disabled>Következő</button>
-            </div>
             <span id="livePlaylistPosition" class="small text-white-50" aria-live="polite"></span>
         </div>
     </div>
@@ -135,5 +143,15 @@
                 </div>
             </div>
         </div>
+    </div>
+    <div id="livePlaylistDock" class="live-playlist-dock d-none" role="group" aria-label="Dalváltás a műsorlistában">
+        <button type="button" class="btn btn-outline-light live-playlist-button" id="livePlaylistPrevious" disabled>
+            <span class="live-playlist-direction">← Előző dal</span>
+            <span class="live-playlist-button-title" id="livePlaylistPreviousTitle">A lista elején</span>
+        </button>
+        <button type="button" class="btn btn-outline-light live-playlist-button" id="livePlaylistNext" disabled>
+            <span class="live-playlist-direction">Következő dal →</span>
+            <span class="live-playlist-button-title" id="livePlaylistNextTitle">--</span>
+        </button>
     </div>
 </div>

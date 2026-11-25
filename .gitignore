@@ -10,5 +10,6 @@ Thumbs.db
 
 # logs / temp
 *.log
+/php/api/error_log
 *.tmp
 *.bak

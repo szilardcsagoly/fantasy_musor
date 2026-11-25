@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" viewBox="0 0 512 512" width="512" height="512"><metadata><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/"><rdf:Description><dc:creator>RealFaviconGenerator</dc:creator><dc:source>https://realfavicongenerator.net</dc:source></rdf:Description></rdf:RDF></metadata><defs>
+    <style>
+      .cls-1 {
+        fill: #fff;
+      }
+
+      .cls-2 {
+        fill: #324e8d;
+      }
+    </style>
+  </defs><circle class="cls-2" cx="256" cy="256" r="253.85"></circle><g>
+    <polygon class="cls-1" points="448.75 98.94 358.26 189.42 198.55 189.42 198.55 349.15 108.07 439.64 108.07 98.94 448.75 98.94"></polygon>
+    <polygon class="cls-1" points="344.67 203.02 299.43 248.26 254.2 293.5 132.66 293.5 132.66 203.02 344.67 203.02"></polygon>
+  </g></svg>
